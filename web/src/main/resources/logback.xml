@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration debug="false">
+    <property name="default_pattern"
+        value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{TRACEID}] [%thread] %-5level %logger{36} - %msg%n" />
+
+    <appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${default_pattern}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+<!--    <appender name="debug" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>DEBUG</level>
+        </filter>
+        <file>/export/Logs/galaxy.jd.local/galaxy-webapp.debug.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>/export/Logs/galaxy.jd.local/galaxy-webapp.debug-%d{yyyy-MM-dd}.log</fileNamePattern>
+        </rollingPolicy>
+        <Encoding>UTF-8</Encoding>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>${default_pattern}</pattern>
+        </layout>
+    </appender>
+
+    <appender name="info" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <file>/export/Logs/galaxy.jd.local/galaxy-webapp.info.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>/export/Logs/galaxy.jd.local/galaxy-webapp.info-%d{yyyy-MM-dd}.log</fileNamePattern>
+        </rollingPolicy>
+        <Encoding>UTF-8</Encoding>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>${default_pattern}</pattern>
+        </layout>
+    </appender>
+
+    <appender name="error" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <file>/export/Logs/galaxy.jd.local/galaxy-webapp.error.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>/export/Logs/galaxy.jd.local/galaxy-webapp.error-%d{yyyy-MM-dd}.log</fileNamePattern>
+        </rollingPolicy>
+        <Encoding>UTF-8</Encoding>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>${default_pattern}</pattern>
+        </layout>
+    </appender>-->
+
+    <root level="debug">
+        <appender-ref ref="stdout" />
+<!--        <appender-ref ref="info" />
+        <appender-ref ref="debug" />
+        <appender-ref ref="error" />-->
+    </root>
+
+</configuration>
