@@ -51,7 +51,6 @@ public class WorkbookEventReader<T> extends FilterWorkbookReader<T>
 
     /**
      * Assume event mode can not happen this situation
-     * // todo
      */
     @Override
     public List<Object> errors(int start, int end) {
