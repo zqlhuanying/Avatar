@@ -1,4 +1,4 @@
-package com.personal;
+package com.personal.web.ucc;
 
 import com.google.common.collect.Lists;
 import com.personal.spring.ConfigPropertySourcesProcessor;
@@ -25,12 +25,7 @@ public class BeanConfig {
 
     private List<UccNamespace> registryUccConfig() {
         return Lists.newArrayList(
-                new UccNamespace("application", "MWZ6tUZe", true),
-                new UccNamespace("jmq", "4ZPz3NoW", true),
-                new UccNamespace("jss-config", "WldPHiy9", true),
-                new UccNamespace("config", "CMrYPPEk", true),
-                new UccNamespace("ValidationMessages", "qIKIYOTM", true),
-                new UccNamespace("velocity", "ynUmVPlO", false)
+                new UccNamespace("jss-config", "WldPHiy9", true)
         );
     }
 
