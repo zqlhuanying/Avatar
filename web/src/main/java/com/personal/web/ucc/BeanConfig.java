@@ -1,4 +1,4 @@
-package com.personal.web.ucc;
+/*package com.personal.web.ucc;
 
 import com.google.common.collect.Lists;
 import com.personal.spring.ConfigPropertySourcesProcessor;
@@ -9,9 +9,9 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
 
-/**
+*//**
  * @author zhuangqianliao
- */
+ *//*
 @Configuration
 public class BeanConfig {
 
@@ -34,4 +34,4 @@ public class BeanConfig {
                 new UccNamespace("important", "", false)
         );
     }
-}
+}*/
