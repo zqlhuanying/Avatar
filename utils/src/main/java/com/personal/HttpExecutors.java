@@ -24,12 +24,22 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.config.Registry;
+import org.apache.http.config.RegistryBuilder;
+import org.apache.http.conn.DnsResolver;
+import org.apache.http.conn.HttpConnectionFactory;
+import org.apache.http.conn.ManagedHttpClientConnection;
+import org.apache.http.conn.SchemePortResolver;
+import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.conn.socket.ConnectionSocketFactory;
+import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLInitializationException;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.ssl.SSLContextBuilder;
 import org.apache.http.ssl.TrustStrategy;
@@ -49,6 +59,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -62,6 +73,7 @@ public final class HttpExecutors {
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpExecutors.class);
     private static final String ENCODING = Charsets.UTF_8.name();
     private static final String QUERY_REGEX = "(?<=%s=)([^&]*)";
+    private static final Joiner.MapJoiner QUERY_JOINER = Joiner.on("&").withKeyValueSeparator("=");
     private static final int DEFAULT_MAX_TOTAL_CONNECTIONS = 20;
     private static final int DEFAULT_MAX_ROUTE_CONNECTIONS = 2;
     private static final ContentType MULTIPART_FORM_DATA = ContentType.create(
@@ -101,8 +113,22 @@ public final class HttpExecutors {
      * 每个路由最大连接数
      */
     private final int maxRouteConnections;
-    private final boolean isHttps;
-    private ResponseHandler handler;
+    /**
+     * 连接存活时间
+     */
+    private final int timeToLive;
+    /**
+     * 连接存活时间单位
+     */
+    private final TimeUnit timeToLiveUnit;
+    /**
+     * Https 证书
+     */
+    private final SSLContext sslContext;
+    /**
+     * 响应Handler
+     */
+    private final ResponseHandler handler;
 
     private HttpClient httpClient;
 
@@ -119,13 +145,11 @@ public final class HttpExecutors {
         this.socketTimeout = builder.socketTimeout;
         this.maxTotalConnections = builder.maxTotalConnections;
         this.maxRouteConnections = builder.maxRouteConnections;
-        this.isHttps = builder.isHttps;
+        this.timeToLive = builder.timeToLive;
+        this.timeToLiveUnit = builder.timeToLiveUnit;
+        this.sslContext = builder.sslContext;
         this.handler = builder.handler;
         initHttpClient();
-    }
-
-    public static HttpExecutors.Builder create() {
-        return new Builder();
     }
 
     public static HttpExecutors.Builder create(String url) {
@@ -214,10 +238,10 @@ public final class HttpExecutors {
     }
 
     /**
-     * just for get method
-     * @param url
-     * @param params
-     * @return
+     * Just for get method
+     * @param url the origin url
+     * @param params the query params
+     * @return the real url to be requested
      */
     public static String buildRealUrl(String url, Map<String, String> params) {
         checkNotNull(url, "url must be not null");
@@ -249,8 +273,7 @@ public final class HttpExecutors {
                 return urlEncode(params.get(param));
             }
         });
-        return Joiner.on("&")
-                .withKeyValueSeparator("=")
+        return QUERY_JOINER
                 .appendTo(new StringBuilder(), tmp)
                 .toString();
     }
@@ -357,7 +380,7 @@ public final class HttpExecutors {
         return "";
     }
 
-    private static class DefaultResponseHandler implements ResponseHandler{
+    private static class DefaultResponseHandler implements ResponseHandler {
         @Override
         public Object handleResponse(HttpResponse response) throws ClientProtocolException, IOException{
             int statusCode = response.getStatusLine().getStatusCode();
@@ -379,6 +402,48 @@ public final class HttpExecutors {
         }
     }
 
+    private static class MyPoolingHttpClientConnectionManager extends PoolingHttpClientConnectionManager {
+
+        public MyPoolingHttpClientConnectionManager(Builder builder) {
+            this(0L, null);
+        }
+
+        public MyPoolingHttpClientConnectionManager(long timeToLive, TimeUnit unit) {
+            super(timeToLive, unit);
+        }
+
+        public MyPoolingHttpClientConnectionManager(Registry<ConnectionSocketFactory> socketFactoryRegistry,
+                                                    HttpConnectionFactory<HttpRoute, ManagedHttpClientConnection> connFactory,
+                                                    SchemePortResolver schemePortResolver,
+                                                    DnsResolver dnsResolver,
+                                                    long timeToLive, TimeUnit unit) {
+            super(socketFactoryRegistry, connFactory, schemePortResolver, dnsResolver, timeToLive, unit);
+        }
+
+        private SSLContext buildSSLContext() {
+            TrustStrategy trustStrategy = new TrustStrategy() {
+                @Override
+                public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                    return true;
+                }
+            };
+            try {
+                return SSLContextBuilder.create()
+                        .loadTrustMaterial(null, trustStrategy)
+                        .build();
+            } catch (NoSuchAlgorithmException
+                    | KeyManagementException
+                    | KeyStoreException e) {
+                LOGGER.error("build ssl context failed", e);
+                throw new SSLInitializationException("ssl context init failed", e);
+            }
+        }
+
+        private SSLContext getDefaultSSLContext() {
+
+        }
+    }
+
     @Setter
     @Accessors(chain = true)
     public static class Builder {
@@ -394,7 +459,9 @@ public final class HttpExecutors {
         private int socketTimeout;
         private int maxTotalConnections;
         private int maxRouteConnections;
-        private boolean isHttps;
+        private final int timeToLive;
+        private final TimeUnit timeToLiveUnit;
+        private final SSLContext sslContext;
         private ResponseHandler handler;
 
         Builder() {
@@ -410,7 +477,9 @@ public final class HttpExecutors {
             this.socketTimeout = -1;
             this.maxTotalConnections = DEFAULT_MAX_TOTAL_CONNECTIONS;
             this.maxRouteConnections = DEFAULT_MAX_ROUTE_CONNECTIONS;
-            this.isHttps = false;
+            this.timeToLive = -1;
+            this.timeToLiveUnit = TimeUnit.MILLISECONDS;
+            this.sslContext = null;
             this.handler = new DefaultResponseHandler();
         }
 

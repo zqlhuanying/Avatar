@@ -12,8 +12,7 @@ public class HttpExecutorsTest {
     public void connectionManagerSharedTest() {
         String url = "https://www.baidu.com";
 
-        HttpExecutors httpExecutors1 = HttpExecutors.create()
-                .setUrl(url)
+        HttpExecutors httpExecutors1 = HttpExecutors.create(url)
                 .build();
         for (int i = 0; i < 1000; i++) {
             httpExecutors1.httpGet();
