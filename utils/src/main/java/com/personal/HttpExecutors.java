@@ -73,6 +73,8 @@ public final class HttpExecutors {
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpExecutors.class);
     private static final String ENCODING = Charsets.UTF_8.name();
     private static final Joiner.MapJoiner QUERY_JOINER = Joiner.on("&").withKeyValueSeparator("=");
+    private static final Joiner JOINER = Joiner.on("?");
+    private static final Splitter SPLITTER = Splitter.on("?");
     private static final ContentType MULTIPART_FORM_DATA = ContentType.create(
             "multipart/form-data", ENCODING);
     private static final ContentType APPLICATION_JSON = ContentType.create(
@@ -198,7 +200,7 @@ public final class HttpExecutors {
         String realUrl = url;
         if (params != null && params.size() > 0) {
             String queryString = buildQueryString(params);
-            Joiner joiner = Joiner.on("?");
+            Joiner joiner = JOINER;
             if (hasQueryString(url)) {
                 joiner = Joiner.on("&");
             }
@@ -228,7 +230,6 @@ public final class HttpExecutors {
     }
 
     private void addHeaders(HttpRequestBase requestBase, Map<String, String> headers) {
-        headers.put("Accept", contentType.getMimeType());
         headers.put("Content-type", contentType.getMimeType());
         if (this.gzipCompress) {
             headers.put("Content-Encoding", "gzip");
@@ -303,7 +304,7 @@ public final class HttpExecutors {
         if (StringUtils.isBlank(url)) {
             return false;
         }
-        List<String> split = Splitter.on('?').splitToList(url);
+        List<String> split = SPLITTER.splitToList(url);
         return CollectionUtils.isNotEmpty(split) && split.size() > 1;
     }
 
