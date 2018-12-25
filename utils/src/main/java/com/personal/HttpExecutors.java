@@ -87,7 +87,7 @@ public final class HttpExecutors {
     private final String url;
     private final Map<String, String> headers;
     private final Map<String, Object> params;
-    private final String postBody;
+    private final String postJsonBody;
     private final CookieStore cookies;
     /**
      * 用于区分二进制、文件、图片等请求
@@ -106,6 +106,7 @@ public final class HttpExecutors {
      */
     private final int socketTimeout;
     private final ResponseHandler responseHandler;
+    private final boolean ignoreException;
 
     private final HttpClient httpClient;
 
@@ -113,13 +114,14 @@ public final class HttpExecutors {
         this.url = builder.url;
         this.headers = builder.headers;
         this.params = builder.params;
-        this.postBody = builder.postBody;
+        this.postJsonBody = builder.postJsonBody;
         this.cookies = builder.cookies;
         this.isBinary = builder.isBinary;
         this.connectionRequestTimeout = builder.connectionRequestTimeout;
         this.connectTimeout = builder.connectTimeout;
         this.socketTimeout = builder.socketTimeout;
         this.responseHandler = builder.responseHandler;
+        this.ignoreException = builder.ignoreException;
         this.httpClient = HttpClients.custom()
                 .setDefaultCookieStore(cookies)
                 .setDefaultRequestConfig(buildRequestConfig())
@@ -193,7 +195,7 @@ public final class HttpExecutors {
         return realUrl;
     }
 
-    public static String buildQueryString(final Map<String, Object> params) {
+    private static String buildQueryString(final Map<String, Object> params) {
         if (params == null) {
             return "";
         }
@@ -218,7 +220,7 @@ public final class HttpExecutors {
 
     /**
      * just for post method
-     * @return
+     * @return HttpEntity
      */
     private HttpEntity buildHttpEntity() {
         HttpEntity httpEntity;
@@ -232,8 +234,8 @@ public final class HttpExecutors {
             }
             httpEntity = builder.build();
         } else {
-            String body = StringUtils.isBlank(postBody) ? buildQueryString(params) : postBody;
-            ContentType contentType = StringUtils.isBlank(postBody) ? APPLICATION_FORM_URLENCODED : APPLICATION_JSON;
+            String body = StringUtils.isBlank(postJsonBody) ? buildQueryString(params) : postJsonBody;
+            ContentType contentType = StringUtils.isBlank(postJsonBody) ? APPLICATION_FORM_URLENCODED : APPLICATION_JSON;
             StringEntity stringEntity = new StringEntity(body, ENCODING);
             stringEntity.setContentEncoding(ENCODING);
             stringEntity.setContentType(contentType.getMimeType());
@@ -243,16 +245,22 @@ public final class HttpExecutors {
     }
 
     private String doExecute(HttpUriRequest request, HttpContext context) {
+        final String requestUrl = request.getURI().toString();
         try {
             return (String) httpClient.execute(request, responseHandler, context);
         } catch (ClientProtocolException e) {
-            LOGGER.error("httpGet ClientProtocolException", e);
+            LOGGER.error("Http execute ClientProtocolException. Url: {}", requestUrl, e);
+            return throwOrSwallowException("Http execute ClientProtocolException. Url: " + requestUrl, e);
         } catch (IOException e) {
-            LOGGER.error("httpGet IOException", e);
+            LOGGER.error("Http execute IOException. Url: {}", requestUrl, e);
+            return throwOrSwallowException("Http execute IOException. Url: " + requestUrl, e);
+        } catch (HttpInvokeException e) {
+            LOGGER.error("Http invoke exception. Url: {}", requestUrl, e);
+            return throwOrSwallowException(e.getMessage() + " Url: " + requestUrl, e);
         } catch (Exception e) {
-            LOGGER.error("httpGet Exception", e);
+            LOGGER.error("Http execute Exception. Url: {}", requestUrl, e);
+            return throwOrSwallowException("Http execute Exception. Url: " + requestUrl, e);
         }
-        return "";
     }
 
     private static String urlEncode(String input) {
@@ -289,7 +297,7 @@ public final class HttpExecutors {
         return filterByPattern(regex, url);
     }
 
-    public static String filterByPattern(String patternString, String data) {
+    private static String filterByPattern(String patternString, String data) {
         Pattern pattern = Pattern.compile(patternString);
         Matcher matcher = pattern.matcher(data);
         while (matcher.find()) {
@@ -300,19 +308,30 @@ public final class HttpExecutors {
         return "";
     }
 
+    private String throwOrSwallowException(String message, Throwable e) {
+        if (ignoreException) {
+            return "";
+        } else {
+            throw e == null ?
+                    new HttpInvokeException(message) : new HttpInvokeException(message, e);
+        }
+    }
+
     private static class DefaultResponseHandler implements ResponseHandler {
         @Override
-        public Object handleResponse(HttpResponse response) throws ClientProtocolException, IOException{
+        public Object handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
             int statusCode = response.getStatusLine().getStatusCode();
             if (statusCode != HttpStatus.SC_OK) {
                 LOGGER.warn("statusCode: {}, statusMsg: {}",
                         statusCode, response.getStatusLine().getReasonPhrase());
-                return "";
+                throw new HttpInvokeException(
+                        String.format("http status: %s, errorMsg: %s", statusCode, response.getStatusLine().getReasonPhrase()),
+                        null);
             }
             HttpEntity entity = response.getEntity();
             if (entity == null) {
-                LOGGER.warn("no result return");
-                return "";
+                LOGGER.warn("response is empty");
+                throw new HttpInvokeException("response is empty", null);
             }
 
             String result = EntityUtils.toString(entity, ENCODING);
@@ -433,13 +452,23 @@ public final class HttpExecutors {
         }
     }
 
+    public static class HttpInvokeException extends RuntimeException {
+        public HttpInvokeException(String message) {
+            super(message);
+        }
+
+        public HttpInvokeException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
     @Setter
     @Accessors(chain = true)
     public static class Builder {
         private String url;
         private Map<String, String> headers;
         private Map<String, Object> params;
-        private String postBody;
+        private String postJsonBody;
         private CookieStore cookies;
         private boolean isBinary;
         private int connectionRequestTimeout;
@@ -451,12 +480,13 @@ public final class HttpExecutors {
         private TimeUnit timeToLiveUnit;
         private SSLContext sslContext;
         private ResponseHandler responseHandler;
+        private boolean ignoreException;
 
         Builder() {
             super();
             this.headers = null;
             this.params = null;
-            this.postBody = null;
+            this.postJsonBody = null;
             this.cookies = null;
             this.isBinary = false;
             this.connectionRequestTimeout = -1;
@@ -468,6 +498,7 @@ public final class HttpExecutors {
             this.timeToLiveUnit = TimeUnit.MILLISECONDS;
             this.sslContext = null;
             this.responseHandler = new DefaultResponseHandler();
+            this.ignoreException = true;
         }
 
         public HttpExecutors build() {
