@@ -11,9 +11,11 @@ public class HttpExecutorsTest {
     public void httpsGetTest() {
         String url = "https://www.baidu.com";
 
-        String res = HttpExecutors.create(url)
-                .build()
-                .httpGet();
-        System.out.println(res);
+        for (int i = 0; i < 10; i++) {
+            String res = HttpExecutors.create(url)
+                    .build()
+                    .httpGet();
+            System.out.println(res);
+        }
     }
 }

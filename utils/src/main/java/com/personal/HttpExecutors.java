@@ -68,8 +68,6 @@ public final class HttpExecutors {
     private static final String ENCODING = Charsets.UTF_8.name();
     private static final String QUERY_REGEX = "(?<=%s=)([^&]*)";
     private static final Joiner.MapJoiner QUERY_JOINER = Joiner.on("&").withKeyValueSeparator("=");
-    private static final int DEFAULT_MAX_TOTAL_CONNECTIONS = 20;
-    private static final int DEFAULT_MAX_ROUTE_CONNECTIONS = 2;
     private static final ContentType MULTIPART_FORM_DATA = ContentType.create(
             "multipart/form-data", ENCODING);
     private static final ContentType APPLICATION_JSON = ContentType.create(
@@ -102,8 +100,7 @@ public final class HttpExecutors {
     private final int socketTimeout;
     private final ResponseHandler responseHandler;
 
-    private HttpClient httpClient;
-    private volatile HttpClientConnectionManager connManager;
+    private final HttpClient httpClient;
 
     private HttpExecutors(Builder builder) {
         this.url = builder.url;
@@ -117,7 +114,11 @@ public final class HttpExecutors {
         this.connectTimeout = builder.connectTimeout;
         this.socketTimeout = builder.socketTimeout;
         this.responseHandler = builder.responseHandler;
-        initHttpClient(builder);
+        this.httpClient = HttpClients.custom()
+                .setDefaultCookieStore(cookies)
+                .setDefaultRequestConfig(buildRequestConfig())
+                .setConnectionManager(MyPoolingHttpClientConnectionManager.getInstance(builder))
+                .build();
     }
 
     public static HttpExecutors.Builder create(String url) {
@@ -152,42 +153,11 @@ public final class HttpExecutors {
         return doExecute(httpPost, context);
     }
 
-    /**
-     * 使用 HttpClient 时，默认使用了 PoolingHttpClientConnectionManager
-     * 因此只要设置相应的参数（maxConnTotal、maxConnPerRoute）即可
-     */
-    private void initHttpClient(Builder builder) {
-        httpClient = HttpClients.custom()
-                .setDefaultCookieStore(cookies)
-                .setDefaultRequestConfig(buildRequestConfig())
-                .setConnectionManager(getConnectionManager(builder))
-                .build();
-/*        httpClient = HttpClients.custom()
-                .setDefaultCookieStore(cookies)
-                .setSSLSocketFactory(buildSSLConnectionFactory())
-                .setDefaultRequestConfig(buildRequestConfig())
-                .setMaxConnTotal(maxTotalConnections)
-                .setMaxConnPerRoute(maxRouteConnections)
-                .build();*/
-    }
-
-    private HttpClientConnectionManager getConnectionManager(Builder builder) {
-        if (this.connManager == null) {
-            synchronized (this) {
-                if (this.connManager == null) {
-                    this.connManager = new MyPoolingHttpClientConnectionManager(builder);
-                }
-            }
-        }
-        return this.connManager;
-    }
-
     private RequestConfig buildRequestConfig() {
         return RequestConfig.custom()
                 .setConnectionRequestTimeout(connectionRequestTimeout)
                 .setConnectTimeout(connectTimeout)
                 .setSocketTimeout(socketTimeout)
-                //.setCookieSpec(CookieSpecs.STANDARD_STRICT)
                 .build();
     }
 
@@ -374,7 +344,9 @@ public final class HttpExecutors {
          */
         private static final TimeUnit DEFAULT_TIME_TO_LIVE_UNIT = TimeUnit.MILLISECONDS;
 
-        public MyPoolingHttpClientConnectionManager(Builder builder) {
+        private static volatile MyPoolingHttpClientConnectionManager connManager;
+
+        private MyPoolingHttpClientConnectionManager(Builder builder) {
             super(
                     RegistryBuilder.<ConnectionSocketFactory>create()
                             .register("http", PlainConnectionSocketFactory.getSocketFactory())
@@ -388,6 +360,17 @@ public final class HttpExecutors {
             );
             this.setMaxTotal(builder.maxTotalConnections > 0 ? builder.maxTotalConnections : DEFAULT_MAX_TOTAL_CONNECTIONS);
             this.setDefaultMaxPerRoute(builder.maxRouteConnections > 0 ? builder.maxRouteConnections : DEFAULT_MAX_ROUTE_CONNECTIONS);
+        }
+
+        public static MyPoolingHttpClientConnectionManager getInstance(Builder builder) {
+            if (connManager == null) {
+                synchronized (MyPoolingHttpClientConnectionManager.class) {
+                    if (connManager == null) {
+                        connManager = new MyPoolingHttpClientConnectionManager(builder);
+                    }
+                }
+            }
+            return connManager;
         }
 
         private static SSLContext buildSSLContext(Builder builder) {
