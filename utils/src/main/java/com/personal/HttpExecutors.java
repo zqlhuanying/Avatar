@@ -56,11 +56,10 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -86,7 +85,7 @@ public final class HttpExecutors {
     private final String url;
     private final Map<String, String> headers;
     private final Map<String, Object> params;
-    private final String postJsonBody;
+    private final String textBody;
     private final CookieStore cookies;
     /**
      * 用于区分二进制、文件、图片等请求
@@ -106,6 +105,7 @@ public final class HttpExecutors {
     private final int socketTimeout;
     private final ResponseHandler responseHandler;
     private final boolean ignoreException;
+    private final ContentType contentType;
 
     private final HttpClient httpClient;
 
@@ -113,7 +113,7 @@ public final class HttpExecutors {
         this.url = builder.url;
         this.headers = builder.headers;
         this.params = builder.params;
-        this.postJsonBody = builder.postJsonBody;
+        this.textBody = builder.textBody;
         this.cookies = builder.cookies;
         this.isBinary = builder.isBinary;
         this.connectionRequestTimeout = builder.connectionRequestTimeout;
@@ -121,6 +121,7 @@ public final class HttpExecutors {
         this.socketTimeout = builder.socketTimeout;
         this.responseHandler = builder.responseHandler;
         this.ignoreException = builder.ignoreException;
+        this.contentType = builder.contentType;
         this.httpClient = HttpClients.custom()
                 .setDefaultCookieStore(cookies)
                 .setDefaultRequestConfig(buildRequestConfig())
@@ -210,10 +211,10 @@ public final class HttpExecutors {
     }
 
     private void addHeaders(HttpRequestBase requestBase, Map<String, String> headers) {
-        if (headers != null) {
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                requestBase.addHeader(entry.getKey(), entry.getValue());
-            }
+        headers.put("Accept", contentType.getMimeType());
+        headers.put("Content-type", contentType.getMimeType());
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            requestBase.addHeader(entry.getKey(), entry.getValue());
         }
     }
 
@@ -233,8 +234,8 @@ public final class HttpExecutors {
             }
             httpEntity = builder.build();
         } else {
-            String body = StringUtils.isBlank(postJsonBody) ? buildQueryString(params) : postJsonBody;
-            ContentType contentType = StringUtils.isBlank(postJsonBody) ? APPLICATION_FORM_URLENCODED : APPLICATION_JSON;
+            String body = StringUtils.isBlank(textBody) ? buildQueryString(params) : textBody;
+            ContentType contentType = StringUtils.isBlank(textBody) ? APPLICATION_FORM_URLENCODED : this.contentType;
             StringEntity stringEntity = new StringEntity(body, ENCODING);
             stringEntity.setContentEncoding(ENCODING);
             stringEntity.setContentType(contentType.getMimeType());
@@ -444,7 +445,7 @@ public final class HttpExecutors {
         private String url;
         private Map<String, String> headers;
         private Map<String, Object> params;
-        private String postJsonBody;
+        private String textBody;
         private CookieStore cookies;
         private boolean isBinary;
         private int connectionRequestTimeout;
@@ -457,12 +458,13 @@ public final class HttpExecutors {
         private SSLContext sslContext;
         private ResponseHandler responseHandler;
         private boolean ignoreException;
+        private ContentType contentType;
 
         Builder() {
             super();
-            this.headers = null;
+            this.headers = new HashMap<>(2);
             this.params = null;
-            this.postJsonBody = null;
+            this.textBody = null;
             this.cookies = null;
             this.isBinary = false;
             this.connectionRequestTimeout = -1;
@@ -475,6 +477,7 @@ public final class HttpExecutors {
             this.sslContext = null;
             this.responseHandler = new DefaultResponseHandler();
             this.ignoreException = true;
+            this.contentType = APPLICATION_JSON;
         }
 
         public HttpExecutors build() {
