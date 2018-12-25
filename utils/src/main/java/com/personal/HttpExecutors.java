@@ -24,13 +24,8 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
-import org.apache.http.conn.DnsResolver;
-import org.apache.http.conn.HttpConnectionFactory;
-import org.apache.http.conn.ManagedHttpClientConnection;
-import org.apache.http.conn.SchemePortResolver;
-import org.apache.http.conn.routing.HttpRoute;
+import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
 import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
@@ -68,7 +63,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * @author qianliao.zhuang
  */
-@Getter
 public final class HttpExecutors {
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpExecutors.class);
     private static final String ENCODING = Charsets.UTF_8.name();
@@ -78,11 +72,12 @@ public final class HttpExecutors {
     private static final int DEFAULT_MAX_ROUTE_CONNECTIONS = 2;
     private static final ContentType MULTIPART_FORM_DATA = ContentType.create(
             "multipart/form-data", ENCODING);
-    public static final ContentType APPLICATION_JSON = ContentType.create(
+    private static final ContentType APPLICATION_JSON = ContentType.create(
             "application/json", ENCODING);
-    public static final ContentType APPLICATION_FORM_URLENCODED = ContentType.create(
+    private static final ContentType APPLICATION_FORM_URLENCODED = ContentType.create(
             "application/x-www-form-urlencoded", ENCODING);
 
+    @Getter
     private final String url;
     private final Map<String, String> headers;
     private final Map<String, String> params;
@@ -105,32 +100,10 @@ public final class HttpExecutors {
      * 等待服务器返回数据超时设置
      */
     private final int socketTimeout;
-    /**
-     * 连接池最大连接数
-     */
-    private final int maxTotalConnections;
-    /**
-     * 每个路由最大连接数
-     */
-    private final int maxRouteConnections;
-    /**
-     * 连接存活时间
-     */
-    private final int timeToLive;
-    /**
-     * 连接存活时间单位
-     */
-    private final TimeUnit timeToLiveUnit;
-    /**
-     * Https 证书
-     */
-    private final SSLContext sslContext;
-    /**
-     * 响应Handler
-     */
-    private final ResponseHandler handler;
+    private final ResponseHandler responseHandler;
 
     private HttpClient httpClient;
+    private volatile HttpClientConnectionManager connManager;
 
     private HttpExecutors(Builder builder) {
         this.url = builder.url;
@@ -143,13 +116,8 @@ public final class HttpExecutors {
         this.connectionRequestTimeout = builder.connectionRequestTimeout;
         this.connectTimeout = builder.connectTimeout;
         this.socketTimeout = builder.socketTimeout;
-        this.maxTotalConnections = builder.maxTotalConnections;
-        this.maxRouteConnections = builder.maxRouteConnections;
-        this.timeToLive = builder.timeToLive;
-        this.timeToLiveUnit = builder.timeToLiveUnit;
-        this.sslContext = builder.sslContext;
-        this.handler = builder.handler;
-        initHttpClient();
+        this.responseHandler = builder.responseHandler;
+        initHttpClient(builder);
     }
 
     public static HttpExecutors.Builder create(String url) {
@@ -188,44 +156,30 @@ public final class HttpExecutors {
      * 使用 HttpClient 时，默认使用了 PoolingHttpClientConnectionManager
      * 因此只要设置相应的参数（maxConnTotal、maxConnPerRoute）即可
      */
-    private void initHttpClient() {
+    private void initHttpClient(Builder builder) {
         httpClient = HttpClients.custom()
+                .setDefaultCookieStore(cookies)
+                .setDefaultRequestConfig(buildRequestConfig())
+                .setConnectionManager(getConnectionManager(builder))
+                .build();
+/*        httpClient = HttpClients.custom()
                 .setDefaultCookieStore(cookies)
                 .setSSLSocketFactory(buildSSLConnectionFactory())
                 .setDefaultRequestConfig(buildRequestConfig())
                 .setMaxConnTotal(maxTotalConnections)
                 .setMaxConnPerRoute(maxRouteConnections)
-                .build();
+                .build();*/
     }
 
-    private SSLConnectionSocketFactory buildSSLConnectionFactory() {
-        SSLContext context = buildSSLContext();
-        if (context != null) {
-            return new SSLConnectionSocketFactory(context);
-        }
-        return null;
-    }
-
-    private SSLContext buildSSLContext() {
-        if (isHttps) {
-            TrustStrategy trustStrategy = new TrustStrategy() {
-                @Override
-                public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    return true;
+    private HttpClientConnectionManager getConnectionManager(Builder builder) {
+        if (this.connManager == null) {
+            synchronized (this) {
+                if (this.connManager == null) {
+                    this.connManager = new MyPoolingHttpClientConnectionManager(builder);
                 }
-            };
-            try {
-                return SSLContextBuilder.create()
-                        .loadTrustMaterial(null, trustStrategy)
-                        .build();
-            } catch (NoSuchAlgorithmException
-                    | KeyManagementException
-                    | KeyStoreException e) {
-                LOGGER.error("build ssl context failed", e);
-                throw new SSLInitializationException("ssl init exception", e);
             }
         }
-        return null;
+        return this.connManager;
     }
 
     private RequestConfig buildRequestConfig() {
@@ -324,7 +278,7 @@ public final class HttpExecutors {
 
     private String doExecute(HttpUriRequest request, HttpContext context) {
         try {
-            return (String) httpClient.execute(request, handler, context);
+            return (String) httpClient.execute(request, responseHandler, context);
         } catch (ClientProtocolException e) {
             LOGGER.error("httpGet ClientProtocolException", e);
         } catch (IOException e) {
@@ -403,24 +357,44 @@ public final class HttpExecutors {
     }
 
     private static class MyPoolingHttpClientConnectionManager extends PoolingHttpClientConnectionManager {
+        /**
+         * 默认连接池最大连接数
+         */
+        private static final int DEFAULT_MAX_TOTAL_CONNECTIONS = 20;
+        /**
+         * 默认每个路由最大连接数
+         */
+        private static final int DEFAULT_MAX_ROUTE_CONNECTIONS = 2;
+        /**
+         * 默认连接存活时间
+         */
+        private static final long DEFAULT_TIME_TO_LIVE = -1L;
+        /**
+         * 默认连接存活时间单位
+         */
+        private static final TimeUnit DEFAULT_TIME_TO_LIVE_UNIT = TimeUnit.MILLISECONDS;
 
         public MyPoolingHttpClientConnectionManager(Builder builder) {
-            this(0L, null);
+            super(
+                    RegistryBuilder.<ConnectionSocketFactory>create()
+                            .register("http", PlainConnectionSocketFactory.getSocketFactory())
+                            .register("https", new SSLConnectionSocketFactory(buildSSLContext(builder)))
+                            .build(),
+                    null,
+                    null,
+                    null,
+                    builder.timeToLive > 0 ? builder.timeToLive : DEFAULT_TIME_TO_LIVE,
+                    builder.timeToLiveUnit != null ? builder.timeToLiveUnit : DEFAULT_TIME_TO_LIVE_UNIT
+            );
+            this.setMaxTotal(builder.maxTotalConnections > 0 ? builder.maxTotalConnections : DEFAULT_MAX_TOTAL_CONNECTIONS);
+            this.setDefaultMaxPerRoute(builder.maxRouteConnections > 0 ? builder.maxRouteConnections : DEFAULT_MAX_ROUTE_CONNECTIONS);
         }
 
-        public MyPoolingHttpClientConnectionManager(long timeToLive, TimeUnit unit) {
-            super(timeToLive, unit);
-        }
+        private static SSLContext buildSSLContext(Builder builder) {
+            if (builder.sslContext != null) {
+                return builder.sslContext;
+            }
 
-        public MyPoolingHttpClientConnectionManager(Registry<ConnectionSocketFactory> socketFactoryRegistry,
-                                                    HttpConnectionFactory<HttpRoute, ManagedHttpClientConnection> connFactory,
-                                                    SchemePortResolver schemePortResolver,
-                                                    DnsResolver dnsResolver,
-                                                    long timeToLive, TimeUnit unit) {
-            super(socketFactoryRegistry, connFactory, schemePortResolver, dnsResolver, timeToLive, unit);
-        }
-
-        private SSLContext buildSSLContext() {
             TrustStrategy trustStrategy = new TrustStrategy() {
                 @Override
                 public boolean isTrusted(X509Certificate[] chain, String authType) throws CertificateException {
@@ -437,10 +411,6 @@ public final class HttpExecutors {
                 LOGGER.error("build ssl context failed", e);
                 throw new SSLInitializationException("ssl context init failed", e);
             }
-        }
-
-        private SSLContext getDefaultSSLContext() {
-
         }
     }
 
@@ -459,10 +429,10 @@ public final class HttpExecutors {
         private int socketTimeout;
         private int maxTotalConnections;
         private int maxRouteConnections;
-        private final int timeToLive;
-        private final TimeUnit timeToLiveUnit;
-        private final SSLContext sslContext;
-        private ResponseHandler handler;
+        private long timeToLive;
+        private TimeUnit timeToLiveUnit;
+        private SSLContext sslContext;
+        private ResponseHandler responseHandler;
 
         Builder() {
             super();
@@ -475,12 +445,12 @@ public final class HttpExecutors {
             this.connectionRequestTimeout = -1;
             this.connectTimeout = -1;
             this.socketTimeout = -1;
-            this.maxTotalConnections = DEFAULT_MAX_TOTAL_CONNECTIONS;
-            this.maxRouteConnections = DEFAULT_MAX_ROUTE_CONNECTIONS;
-            this.timeToLive = -1;
+            this.maxTotalConnections = -1;
+            this.maxRouteConnections = -1;
+            this.timeToLive = -1L;
             this.timeToLiveUnit = TimeUnit.MILLISECONDS;
             this.sslContext = null;
-            this.handler = new DefaultResponseHandler();
+            this.responseHandler = new DefaultResponseHandler();
         }
 
         public HttpExecutors build() {
