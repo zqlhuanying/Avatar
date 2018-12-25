@@ -14,11 +14,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.CookieStore;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.ResponseHandler;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.*;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.entity.GzipCompressingEntity;
+import org.apache.http.client.entity.GzipDecompressingEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
@@ -36,6 +37,7 @@ import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.protocol.HttpContext;
@@ -85,6 +87,9 @@ public final class HttpExecutors {
     private final String url;
     private final Map<String, String> headers;
     private final Map<String, Object> params;
+    /**
+     * 用于 Post 请求，发送类似 Json/XML等请求
+     */
     private final String textBody;
     private final CookieStore cookies;
     /**
@@ -106,6 +111,14 @@ public final class HttpExecutors {
     private final ResponseHandler responseHandler;
     private final boolean ignoreException;
     private final ContentType contentType;
+    /**
+     * 数据压缩
+     */
+    private final boolean gzipCompress;
+    /**
+     * 凭证
+     */
+    private final CredentialsProvider credentialsProvider;
 
     private final HttpClient httpClient;
 
@@ -122,8 +135,11 @@ public final class HttpExecutors {
         this.responseHandler = builder.responseHandler;
         this.ignoreException = builder.ignoreException;
         this.contentType = builder.contentType;
+        this.gzipCompress = builder.gzipCompress;
+        this.credentialsProvider = builder.credentialsProvider;
         this.httpClient = HttpClients.custom()
                 .setDefaultCookieStore(cookies)
+                .setDefaultCredentialsProvider(credentialsProvider)
                 .setDefaultRequestConfig(buildRequestConfig())
                 .setConnectionManager(MyPoolingHttpClientConnectionManager.getInstance(builder))
                 .build();
@@ -213,6 +229,10 @@ public final class HttpExecutors {
     private void addHeaders(HttpRequestBase requestBase, Map<String, String> headers) {
         headers.put("Accept", contentType.getMimeType());
         headers.put("Content-type", contentType.getMimeType());
+        if (this.gzipCompress) {
+            headers.put("Accept-Encoding", "gzip");
+            headers.put("Content-Encoding", "gzip");
+        }
         for (Map.Entry<String, String> entry : headers.entrySet()) {
             requestBase.addHeader(entry.getKey(), entry.getValue());
         }
@@ -237,9 +257,11 @@ public final class HttpExecutors {
             String body = StringUtils.isBlank(textBody) ? buildQueryString(params) : textBody;
             ContentType contentType = StringUtils.isBlank(textBody) ? APPLICATION_FORM_URLENCODED : this.contentType;
             StringEntity stringEntity = new StringEntity(body, ENCODING);
-            stringEntity.setContentEncoding(ENCODING);
             stringEntity.setContentType(contentType.getMimeType());
             httpEntity = stringEntity;
+        }
+        if (gzipCompress) {
+            httpEntity = new GzipCompressingEntity(httpEntity);
         }
         return httpEntity;
     }
@@ -294,6 +316,10 @@ public final class HttpExecutors {
         }
     }
 
+    /**
+     * HttpClient 使用 ResponseHandler 会自动释放连接,
+     * 因此 ResponseHandler 只需要关心业务实现即可
+     */
     private static class DefaultResponseHandler implements ResponseHandler {
         @Override
         public Object handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
@@ -311,10 +337,18 @@ public final class HttpExecutors {
                 throw new HttpInvokeException("response is empty", null);
             }
 
-            String result = EntityUtils.toString(entity, ENCODING);
-            // ensure consume
-            EntityUtils.consume(entity);
-            return result;
+            return EntityUtils.toString(entity, ENCODING);
+        }
+    }
+
+    private static class DecompressResponseHandler extends DefaultResponseHandler {
+        @Override
+        public Object handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
+            HttpEntity entity = response.getEntity();
+            if (entity != null) {
+                response.setEntity(new GzipDecompressingEntity(entity));
+            }
+            return super.handleResponse(response);
         }
     }
 
@@ -459,6 +493,10 @@ public final class HttpExecutors {
         private ResponseHandler responseHandler;
         private boolean ignoreException;
         private ContentType contentType;
+        private boolean gzipCompress;
+        private CredentialsProvider credentialsProvider;
+        private String userName;
+        private String password;
 
         Builder() {
             super();
@@ -478,9 +516,29 @@ public final class HttpExecutors {
             this.responseHandler = new DefaultResponseHandler();
             this.ignoreException = true;
             this.contentType = APPLICATION_JSON;
+            this.gzipCompress = false;
+            this.credentialsProvider = null;
+            this.userName = null;
+            this.password = null;
+        }
+
+        public Builder setGzipCompress(boolean gzipCompress) {
+            this.gzipCompress = gzipCompress;
+            if (this.gzipCompress) {
+                this.responseHandler = new DecompressResponseHandler();
+            }
+            return this;
         }
 
         public HttpExecutors build() {
+            checkNotNull(url, "url must be not null");
+            if (StringUtils.isNotBlank(userName) || StringUtils.isNotBlank(password)) {
+                credentialsProvider = new BasicCredentialsProvider();
+                credentialsProvider.setCredentials(
+                        AuthScope.ANY,
+                        new UsernamePasswordCredentials(userName, password)
+                );
+            }
             return new HttpExecutors(this);
         }
     }
