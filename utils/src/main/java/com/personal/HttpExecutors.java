@@ -25,7 +25,6 @@ import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.config.RegistryBuilder;
-import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
 import org.apache.http.conn.socket.PlainConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
@@ -33,6 +32,10 @@ import org.apache.http.conn.ssl.SSLInitializationException;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.ContentBody;
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.entity.mime.content.InputStreamBody;
+import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.protocol.HttpContext;
@@ -45,6 +48,7 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.security.KeyManagementException;
@@ -74,18 +78,21 @@ public final class HttpExecutors {
             "application/json", ENCODING);
     private static final ContentType APPLICATION_FORM_URLENCODED = ContentType.create(
             "application/x-www-form-urlencoded", ENCODING);
+    private static final ContentType TEXT_PLAIN = ContentType.create(
+            "text/plain", ENCODING);
+    private static final ContentType APPLICATION_OCTET_STREAM = ContentType.create(
+            "application/octet-stream");
 
     @Getter
     private final String url;
     private final Map<String, String> headers;
-    private final Map<String, String> params;
+    private final Map<String, Object> params;
     private final String postBody;
     private final CookieStore cookies;
     /**
      * 用于区分二进制、文件、图片等请求
      */
     private final boolean isBinary;
-    private final Map<String, File> binaryMap;
     /**
      * 从连接池获取链接超时设置
      */
@@ -109,7 +116,6 @@ public final class HttpExecutors {
         this.postBody = builder.postBody;
         this.cookies = builder.cookies;
         this.isBinary = builder.isBinary;
-        this.binaryMap = builder.binaryMap;
         this.connectionRequestTimeout = builder.connectionRequestTimeout;
         this.connectTimeout = builder.connectTimeout;
         this.socketTimeout = builder.socketTimeout;
@@ -167,7 +173,7 @@ public final class HttpExecutors {
      * @param params the query params
      * @return the real url to be requested
      */
-    public static String buildRealUrl(String url, Map<String, String> params) {
+    public static String buildRealUrl(String url, Map<String, Object> params) {
         checkNotNull(url, "url must be not null");
 
         String realUrl = url;
@@ -187,14 +193,14 @@ public final class HttpExecutors {
         return realUrl;
     }
 
-    public static String buildQueryString(final Map<String, String> params) {
+    public static String buildQueryString(final Map<String, Object> params) {
         if (params == null) {
             return "";
         }
         Map<String, String> tmp = Maps.toMap(params.keySet(), new Function<String, String>() {
             @Override
             public String apply(String param) {
-                return urlEncode(params.get(param));
+                return urlEncode((String) params.get(param));
             }
         });
         return QUERY_JOINER
@@ -218,20 +224,10 @@ public final class HttpExecutors {
         HttpEntity httpEntity;
         if (isBinary) {
             MultipartEntityBuilder builder = MultipartEntityBuilder.create();
-            // add binary body
-            if (binaryMap != null) {
-                for (Map.Entry<String, File> entry : binaryMap.entrySet()) {
-                    builder.addBinaryBody(
-                            entry.getKey(),
-                            entry.getValue(),
-                            MULTIPART_FORM_DATA,
-                            entry.getValue().getName());
-                }
-            }
-            // add other params
             if (params != null) {
-                for (Map.Entry<String, String> entry : params.entrySet()) {
-                    builder.addTextBody(entry.getKey(), entry.getValue());
+                for (Map.Entry<String, Object> entry : params.entrySet()) {
+                    OctetContentBody contentBody = OctetContentBody.valueOf(entry.getValue());
+                    builder.addPart(entry.getKey(), contentBody.getContentBody(entry.getValue()));
                 }
             }
             httpEntity = builder.build();
@@ -397,16 +393,55 @@ public final class HttpExecutors {
         }
     }
 
+    private enum OctetContentBody {
+        /**
+         * 二进制传输所支持的Body格式
+         */
+        STRING {
+            @Override
+            ContentBody getContentBody(Object o) {
+                return new StringBody((String) o, TEXT_PLAIN);
+            }
+        },
+        FILE {
+            @Override
+            ContentBody getContentBody(Object o) {
+                File copy = (File) o;
+                return new FileBody(copy, MULTIPART_FORM_DATA, copy.getName());
+            }
+        },
+        INPUTSTREAM {
+            @Override
+            ContentBody getContentBody(Object o) {
+                return new InputStreamBody((InputStream) o, APPLICATION_OCTET_STREAM);
+            }
+        };
+
+        abstract ContentBody getContentBody(Object o);
+
+        public static OctetContentBody valueOf(Object o) {
+            if (o instanceof String) {
+                return STRING;
+            }
+            if (o instanceof File) {
+                return FILE;
+            }
+            if (o instanceof InputStream) {
+                return INPUTSTREAM;
+            }
+            throw new IllegalArgumentException(String.format("Type[%s] is not supported", o.getClass().getName()));
+        }
+    }
+
     @Setter
     @Accessors(chain = true)
     public static class Builder {
         private String url;
         private Map<String, String> headers;
-        private Map<String, String> params;
+        private Map<String, Object> params;
         private String postBody;
         private CookieStore cookies;
         private boolean isBinary;
-        private Map<String, File> binaryMap;
         private int connectionRequestTimeout;
         private int connectTimeout;
         private int socketTimeout;
@@ -424,7 +459,6 @@ public final class HttpExecutors {
             this.postBody = null;
             this.cookies = null;
             this.isBinary = false;
-            this.binaryMap = null;
             this.connectionRequestTimeout = -1;
             this.connectTimeout = -1;
             this.socketTimeout = -1;
