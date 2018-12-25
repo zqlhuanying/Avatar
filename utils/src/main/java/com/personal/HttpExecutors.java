@@ -11,6 +11,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
@@ -341,12 +342,25 @@ public final class HttpExecutors {
         }
     }
 
+    /**
+     * HttpClient 已经内置对 HttpResponse Content-Encoding:gzip, deflate 支持
+     * 所以此处 ResponseHandler 是多余的
+     * 要想实现自己的gzip/deflate 逻辑，可以禁用内置的解析器
+     *
+     * HttpClients.custom()
+     * .disableContentCompression()
+     * .build();
+     */
     private static class DecompressResponseHandler extends DefaultResponseHandler {
         @Override
         public Object handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
             HttpEntity entity = response.getEntity();
             if (entity != null) {
-                response.setEntity(new GzipDecompressingEntity(entity));
+                Header contentEncoding = entity.getContentEncoding();
+                if (contentEncoding != null
+                        && "gzip".equalsIgnoreCase(contentEncoding.getValue())) {
+                    response.setEntity(new GzipDecompressingEntity(entity));
+                }
             }
             return super.handleResponse(response);
         }
@@ -520,14 +534,6 @@ public final class HttpExecutors {
             this.credentialsProvider = null;
             this.userName = null;
             this.password = null;
-        }
-
-        public Builder setGzipCompress(boolean gzipCompress) {
-            this.gzipCompress = gzipCompress;
-            if (this.gzipCompress) {
-                this.responseHandler = new DecompressResponseHandler();
-            }
-            return this;
         }
 
         public HttpExecutors build() {
