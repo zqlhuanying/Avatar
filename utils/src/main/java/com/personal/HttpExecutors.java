@@ -70,7 +70,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public final class HttpExecutors {
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpExecutors.class);
     private static final String ENCODING = Charsets.UTF_8.name();
-    private static final String QUERY_REGEX = "(?<=%s=)([^&]*)";
     private static final Joiner.MapJoiner QUERY_JOINER = Joiner.on("&").withKeyValueSeparator("=");
     private static final ContentType MULTIPART_FORM_DATA = ContentType.create(
             "multipart/form-data", ENCODING);
@@ -283,29 +282,6 @@ public final class HttpExecutors {
         }
         List<String> split = Splitter.on('?').splitToList(url);
         return CollectionUtils.isNotEmpty(split) && split.size() > 1;
-    }
-
-    /**
-     * 从 url 的查询字符串中获取待查询的 query 值
-     *
-     * @param url:   Target url
-     * @param query: The query
-     * @return
-     */
-    public static String getQueryValue(String url, String query) {
-        String regex = String.format(QUERY_REGEX, query);
-        return filterByPattern(regex, url);
-    }
-
-    private static String filterByPattern(String patternString, String data) {
-        Pattern pattern = Pattern.compile(patternString);
-        Matcher matcher = pattern.matcher(data);
-        while (matcher.find()) {
-            if (StringUtils.isNotBlank(matcher.group(1))) {
-                return matcher.group(1);
-            }
-        }
-        return "";
     }
 
     private String throwOrSwallowException(String message, Throwable e) {
