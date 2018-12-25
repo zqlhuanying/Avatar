@@ -231,7 +231,6 @@ public final class HttpExecutors {
         headers.put("Accept", contentType.getMimeType());
         headers.put("Content-type", contentType.getMimeType());
         if (this.gzipCompress) {
-            headers.put("Accept-Encoding", "gzip");
             headers.put("Content-Encoding", "gzip");
         }
         for (Map.Entry<String, String> entry : headers.entrySet()) {
