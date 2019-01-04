@@ -478,11 +478,11 @@ public final class HttpExecutors {
     }
 
     public static class HttpInvokeException extends RuntimeException {
-        HttpInvokeException(String message) {
+        public HttpInvokeException(String message) {
             super(message);
         }
 
-        HttpInvokeException(String message, Throwable cause) {
+        public HttpInvokeException(String message, Throwable cause) {
             super(message, cause);
         }
     }
