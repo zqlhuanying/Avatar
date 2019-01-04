@@ -148,6 +148,10 @@ public final class DateUtils {
         return toDateTime(date).getHourOfDay();
     }
 
+    public static int getMinuteOfHour(Date date) {
+        return toDateTime(date).getMinuteOfHour();
+    }
+
     /**
      * 获取当天零点
      * @param date
