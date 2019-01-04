@@ -128,6 +128,22 @@ public final class DateUtils {
         return getMills(plus(now, interval, unit)) - getMills(now);
     }
 
+    public static int getYear(Date date) {
+        return toDateTime(date).getYear();
+    }
+
+    public static int getMonthOfYear(Date date) {
+        return toDateTime(date).getMonthOfYear();
+    }
+
+    public static int getDayOfMonth(Date date) {
+        return toDateTime(date).getDayOfMonth();
+    }
+
+    public static int getDayOfWeek(Date date) {
+        return toDateTime(date).getDayOfWeek();
+    }
+
     public static int getHourOfDay(Date date){
         return toDateTime(date).getHourOfDay();
     }
