@@ -1,9 +1,12 @@
 package com.personal.excel.sheet.read;
 
+import com.google.common.base.Function;
 import com.google.common.collect.FluentIterable;
+import com.personal.excel.option.ErrorRow;
 import com.personal.excel.option.PoiOptions;
 import com.personal.excel.sheet.Source;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Workbook;
 
@@ -16,7 +19,7 @@ import java.util.List;
  */
 @Slf4j
 public abstract class AbstractWorkbookReader<T>
-        implements WorkbookReader<T>, ForkJoin<T, Row> {
+        implements WorkbookReader<T>, ForkJoin<T, ErrorRow> {
 
     protected WorkbookReadSheet<T> readSheet;
 
@@ -53,12 +56,23 @@ public abstract class AbstractWorkbookReader<T>
     }
 
     @Override
-    public List<Row> errors(int start, int end) {
+    public List<ErrorRow> errors(int start, int end) {
         return FluentIterable.from(getReadSheet().getSheet())
                 .skip(start)
                 .limit(end - start)
+                .transform(new Function<Row, ErrorRow>() {
+                    @Override
+                    public ErrorRow apply(Row row) {
+                        ErrorRow errorRow = new ErrorRow();
+                        for (Cell cell : row) {
+                            errorRow.addCell(cell.getColumnIndex(), cell.getStringCellValue());
+                        }
+                        return errorRow;
+                    }
+                })
                 .toList();
     }
+
 
     @Override
     public void release() throws IOException {

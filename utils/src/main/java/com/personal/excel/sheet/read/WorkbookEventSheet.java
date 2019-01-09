@@ -7,6 +7,7 @@ import com.google.common.collect.Range;
 import com.personal.excel.exception.PoiException;
 import com.personal.excel.mapper.Mapper;
 import com.personal.excel.mapper.Mappers;
+import com.personal.excel.option.ErrorRow;
 import com.personal.excel.option.PoiOptions;
 import com.personal.excel.sheet.AbstractWorkbookSheet;
 import com.personal.excel.sheet.BeanUtils;
@@ -83,6 +84,25 @@ public class WorkbookEventSheet<T> extends AbstractWorkbookSheet<T> {
         return IntStream.range(start, end)
                 .mapToObj(result::get)
                 .map(column -> convert(column, type))
+                .collect(Collectors.toList());
+    }
+
+    protected List<ErrorRow> errors(int start, int end) {
+        Map<Integer, String> result = doRead();
+        return IntStream.range(start, end)
+                .mapToObj(result::get)
+                .map(row -> {
+                    ErrorRow errorRow = new ErrorRow();
+                    Iterable<String> cellIterable = splitter.split(row);
+                    for (Iterator<String> iterator = cellIterable.iterator(); iterator.hasNext();) {
+                        String cell = iterator.next();
+                        int index = cell.indexOf(":");
+                        int columnIndex = Integer.parseInt(cell.substring(0, index));
+                        String columnValue = StringEscapeUtils.unescapeXml(cell.substring(index + 1));
+                        errorRow.addCell(columnIndex, columnValue);
+                    }
+                    return errorRow;
+                })
                 .collect(Collectors.toList());
     }
 

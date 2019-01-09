@@ -5,6 +5,7 @@ import com.personal.excel.enums.PoiCellStyle;
 import com.personal.excel.handler.CellStyleHandler;
 import com.personal.excel.mapper.Mapper;
 import com.personal.excel.mapper.Mappers;
+import com.personal.excel.option.ErrorRow;
 import com.personal.excel.option.PoiOptions;
 import com.personal.excel.sheet.AbstractWorkbookSheet;
 import com.personal.excel.sheet.Source;
@@ -120,6 +121,13 @@ public class WorkbookWriteSheet<T> extends AbstractWorkbookSheet<T> {
         if (instance instanceof Row) {
             for (Cell cell : (Row) instance) {
                 CellUtil.createCell(row, cell.getColumnIndex(), DATA_FORMATTER.formatCellValue(cell));
+            }
+            return;
+        }
+
+        if (instance instanceof ErrorRow) {
+            for (Map.Entry<Integer, String> entry : (ErrorRow) instance) {
+                CellUtil.createCell(row, entry.getKey(), entry.getValue());
             }
             return;
         }

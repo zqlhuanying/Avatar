@@ -2,6 +2,7 @@ package com.personal.excel.sheet.read;
 
 import com.personal.excel.enums.PoiExcelType;
 import com.personal.excel.exception.PoiExcelTypeException;
+import com.personal.excel.option.ErrorRow;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 
@@ -14,7 +15,7 @@ import java.util.List;
  */
 @Slf4j
 public class WorkbookEventReader<T> extends FilterWorkbookReader<T>
-        implements ForkJoin<T, Object> {
+        implements ForkJoin<T, ErrorRow> {
 
     private WorkbookEventSheet<T> eventSheet;
 
@@ -49,12 +50,9 @@ public class WorkbookEventReader<T> extends FilterWorkbookReader<T>
         return this.eventSheet.read(start, end, type);
     }
 
-    /**
-     * Assume event mode can not happen this situation
-     */
     @Override
-    public List<Object> errors(int start, int end) {
-        return Collections.emptyList();
+    public List<ErrorRow> errors(int start, int end) {
+        return this.eventSheet.errors(start, end);
     }
 
     @Override
