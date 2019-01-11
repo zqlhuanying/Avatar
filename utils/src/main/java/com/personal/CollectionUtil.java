@@ -104,7 +104,7 @@ public final class CollectionUtil {
     }
 
     public static <T> T getOrDefault(Iterable<T> iterable, int position, T defaultT) {
-        return Iterables.get(safeNull(iterable), position, defaultT);
+        return position < 0 ? defaultT : Iterables.get(safeNull(iterable), position, defaultT);
     }
 
     @SuppressWarnings("unchecked")
