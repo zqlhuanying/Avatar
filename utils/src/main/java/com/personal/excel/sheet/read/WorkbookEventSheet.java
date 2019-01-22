@@ -36,6 +36,7 @@ import java.io.InputStream;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -83,6 +84,7 @@ public class WorkbookEventSheet<T> extends AbstractWorkbookSheet<T> {
         Map<Integer, String> result = doRead();
         return IntStream.range(start, end)
                 .mapToObj(result::get)
+                .filter(Objects::nonNull)
                 .map(column -> convert(column, type))
                 .collect(Collectors.toList());
     }
@@ -91,6 +93,7 @@ public class WorkbookEventSheet<T> extends AbstractWorkbookSheet<T> {
         Map<Integer, String> result = doRead();
         return IntStream.range(start, end)
                 .mapToObj(result::get)
+                .filter(Objects::nonNull)
                 .map(row -> {
                     ErrorRow errorRow = new ErrorRow();
                     Iterable<String> cellIterable = splitter.split(row);
