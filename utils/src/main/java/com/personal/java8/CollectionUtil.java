@@ -64,20 +64,15 @@ public final class CollectionUtil {
                 .collect(Collectors.toList());
     }
 
-    public static <T> Iterable<Iterable<T>> subCycle(final Iterable<T> iterable, final int size) {
-        return new FluentIterable<Iterable<T>>() {
-            @Override
-            public Iterator<Iterable<T>> iterator() {
-                return new SubIterator<>(iterable, size);
-            }
-        };
+    public static <T> Iterable<? extends Iterable<T>> subCycle(final Iterable<T> iterable, final int size) {
+        return partition(iterable, size);
     }
 
     public static <T, R> Iterable<R> subCycle(
             final Iterable<T> iterable,
             final int size,
             Function<? super Iterable<T>, ? extends Iterable<R>> function) {
-        Iterable<Iterable<T>> partOf = subCycle(iterable, size);
+        Iterable<? extends Iterable<T>> partOf = subCycle(iterable, size);
         return of(partOf)
                 .map(function::apply)
                 .flatMap(CollectionUtil::of)
@@ -88,7 +83,7 @@ public final class CollectionUtil {
             final Iterable<T> iterable,
             final int size,
             Consumer<? super Iterable<T>> consumer) {
-        Iterable<Iterable<T>> partOf = subCycle(iterable, size);
+        Iterable<? extends Iterable<T>> partOf = subCycle(iterable, size);
         of(partOf).forEach(consumer::accept);
     }
 
@@ -144,6 +139,7 @@ public final class CollectionUtil {
         }
     };
 
+    @Deprecated
     private static class SubIterator<T> extends AbstractIterator<Iterable<T>> {
         private final Iterable<T> iterable;
         private final int perSize;
