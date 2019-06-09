@@ -74,7 +74,7 @@ public final class CollectionUtil {
             Function<? super Iterable<T>, ? extends Iterable<R>> function) {
         Iterable<? extends Iterable<T>> partOf = subCycle(iterable, size);
         return of(partOf)
-                .map(function::apply)
+                .map(function)
                 .flatMap(CollectionUtil::of)
                 .collect(Collectors.toList());
     }
@@ -84,7 +84,7 @@ public final class CollectionUtil {
             final int size,
             Consumer<? super Iterable<T>> consumer) {
         Iterable<? extends Iterable<T>> partOf = subCycle(iterable, size);
-        of(partOf).forEach(consumer::accept);
+        of(partOf).forEach(consumer);
     }
 
     public static <T> Iterable<List<T>> partition(final Iterable<T> iterable, final int size) {
