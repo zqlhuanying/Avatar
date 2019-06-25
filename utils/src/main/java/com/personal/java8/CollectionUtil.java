@@ -132,7 +132,7 @@ public final class CollectionUtil {
         return (Iterable<T>) EMPTY_ITERABLE;
     }
 
-    private static Iterable<Object> EMPTY_ITERABLE = new FluentIterable<Object>() {
+    private static final Iterable<Object> EMPTY_ITERABLE = new FluentIterable<Object>() {
         @Override
         public Iterator<Object> iterator() {
             return Collections.emptyIterator();
