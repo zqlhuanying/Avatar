@@ -8,7 +8,7 @@ import java.util.function.Function;
  * @author qianliao.zhuang
  */
 public final class EnumUtils {
-    public EnumUtils() {}
+    private EnumUtils() {}
 
     /**
      * 根据关键字获取对应的枚举
