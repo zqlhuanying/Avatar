@@ -22,7 +22,7 @@ public class MakeClass implements ApplicationListener<ApplicationPreparedEvent> 
     private static ClassPool classPool = ClassPool.getDefault();
 
     static {
-        ClassClassPath classPath = new ClassClassPath(RuleMetric.class);
+        ClassClassPath classPath = new ClassClassPath(MakeClass.class);
         classPool.insertClassPath(classPath);
     }
 
