@@ -16,9 +16,10 @@ public final class DateUtils {
 
     private static final String STANDARD_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
-    private DateUtils(){}
+    private DateUtils() {
+    }
 
-    public static Date now(){
+    public static Date now() {
         return DateTime.now().toDate();
     }
 
@@ -69,6 +70,7 @@ public final class DateUtils {
     public static Date minusHours(Date date, int interval) {
         return minus(date, interval, DurationFieldType.hours());
     }
+
     public static Date minusDays(Date date, int interval) {
         return minus(date, interval, DurationFieldType.days());
     }
@@ -85,33 +87,33 @@ public final class DateUtils {
         return minus(date, interval, DurationFieldType.years());
     }
 
-    private static Date plus(Date date, int interval, DurationFieldType unit){
+    private static Date plus(Date date, int interval, DurationFieldType unit) {
         return toDateTime(date)
                 .withFieldAdded(unit, interval)
                 .toDate();
     }
 
-    private static Date minus(Date date, int interval, DurationFieldType unit){
+    private static Date minus(Date date, int interval, DurationFieldType unit) {
         return plus(date, interval * -1, unit);
     }
 
-    public static Date max(Date lDate, Date rDate){
+    public static Date max(Date lDate, Date rDate) {
         return compare(lDate, rDate) > 0 ? lDate : rDate;
     }
 
-    public static Date min(Date lDate, Date rDate){
+    public static Date min(Date lDate, Date rDate) {
         return compare(lDate, rDate) < 0 ? lDate : rDate;
     }
 
-    public static int compare(Date lDate, Date rDate){
+    public static int compare(Date lDate, Date rDate) {
         return DateTimeComparator.getInstance().compare(lDate, rDate);
     }
 
-    public static long getMills(){
+    public static long getMills() {
         return DateTime.now().getMillis();
     }
 
-    public static long getMills(Date date){
+    public static long getMills(Date date) {
         return toDateTime(date).getMillis();
     }
 
@@ -119,11 +121,12 @@ public final class DateUtils {
      * 将 1天，1周之类的转换成毫秒数
      * 1小时 = 3600000
      * 1天 = 86400000
+     *
      * @param interval
      * @param unit
      * @return
      */
-    public static long getMills(int interval, DurationFieldType unit){
+    public static long getMills(int interval, DurationFieldType unit) {
         Date now = now();
         return getMills(plus(now, interval, unit)) - getMills(now);
     }
@@ -144,7 +147,7 @@ public final class DateUtils {
         return toDateTime(date).getDayOfWeek();
     }
 
-    public static int getHourOfDay(Date date){
+    public static int getHourOfDay(Date date) {
         return toDateTime(date).getHourOfDay();
     }
 
@@ -154,10 +157,11 @@ public final class DateUtils {
 
     /**
      * 获取当天零点
+     *
      * @param date
      * @return
      */
-    public static Date getBeginOfTheDay(Date date){
+    public static Date getBeginOfTheDay(Date date) {
         return toDateTime(date)
                 .dayOfWeek()
                 .roundFloorCopy()
@@ -166,29 +170,30 @@ public final class DateUtils {
 
     /**
      * 获取第二天的零点
+     *
      * @param date
      * @return
      */
-    public static Date getNextBeginOfTheDay(Date date){
+    public static Date getNextBeginOfTheDay(Date date) {
         return toDateTime(date)
                 .dayOfWeek()
                 .roundCeilingCopy()
                 .toDate();
     }
 
-    public static String parse(Date date){
+    public static String parse(Date date) {
         return parse(date, STANDARD_FORMAT);
     }
 
-    public static String parse(Date date, String format){
+    public static String parse(Date date, String format) {
         return toDateTime(date).toString(format);
     }
 
-    public static Date parse(String dateStr){
+    public static Date parse(String dateStr) {
         return parse(dateStr, STANDARD_FORMAT);
     }
 
-    public static Date parse(String dateStr, String format){
+    public static Date parse(String dateStr, String format) {
         return DateTimeFormat
                 .forPattern(format)
                 .withLocale(Locale.CHINESE)
@@ -196,13 +201,13 @@ public final class DateUtils {
                 .toDate();
     }
 
-    public static Date parse(long timestamp){
+    public static Date parse(long timestamp) {
         return new Instant(timestamp)
                 .toDateTime()
                 .toDate();
     }
 
-    public static DateTime toDateTime(Date date){
+    public static DateTime toDateTime(Date date) {
         return new DateTime(date);
     }
 }
