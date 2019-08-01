@@ -10,7 +10,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -33,7 +32,7 @@ public class MethodCache {
             new MethodCacheKey()
                     .setClazz(cacheKey.getClazz())
                     .setMethodName(cacheKey.getMethodName())
-                    .setMethodType(lookup(cacheKey.getClazz(), cacheKey.getMethodName(), cacheKey.getArgs()));
+                    .setMethodType(lookup0(cacheKey.getClazz(), cacheKey.getMethodName(), cacheKey.getParameterTypes()));
 
     private static final Function<MethodCacheKey, MethodHandle> VIRTUAL = cacheKey -> {
         try {
@@ -52,29 +51,58 @@ public class MethodCache {
     };
 
     public Object invoke(Object o, String methodName, Object... params) {
-        MethodCacheKey key = new MethodCacheKey()
-                .setClazz(o.getClass())
-                .setMethodName(methodName)
-                .setArgs(params.length);
-        MethodHandle methodHandle = getMethodHandle(key, LOOK_UP_METHOD_TYPE.andThen(VIRTUAL)).bindTo(o);
+        Class<?>[] parameterTypes = new Class<?>[params.length];
+        for (int i = 0; i < params.length; i++) {
+            parameterTypes[i] = params[i].getClass();
+        }
+        MethodHandle methodHandle = lookup(o.getClass(), methodName, parameterTypes).bindTo(o);
         return invokeWithArguments(methodHandle, params);
+    }
+
+    public Object invokeSetter(Object o, String fieldName, Object param) {
+        String methodName = "set" + capitalize(fieldName);
+        MethodHandle methodHandle = lookup(o.getClass(), methodName, param.getClass()).bindTo(o);
+        return invokeWithArguments(methodHandle, param);
+    }
+
+    public Object invokeGetter(Object o, String fieldName) {
+        String methodName = "get" + capitalize(fieldName);
+        MethodHandle methodHandle = lookup(o.getClass(), methodName).bindTo(o);
+        return invokeWithArguments(methodHandle);
     }
 
     public Object invokeStatic(Class<?> clazz, String methodName, Object... params) {
-        MethodCacheKey key = new MethodCacheKey()
-                .setClazz(clazz)
-                .setMethodName(methodName)
-                .setArgs(params.length);
-        MethodHandle methodHandle = getMethodHandle(key, LOOK_UP_METHOD_TYPE.andThen(STATIC));
+        Class<?>[] parameterTypes = new Class<?>[params.length];
+        for (int i = 0; i < params.length; i++) {
+            parameterTypes[i] = params[i].getClass();
+        }
+        MethodHandle methodHandle = lookupStatic(clazz, methodName, parameterTypes);
         return invokeWithArguments(methodHandle, params);
     }
 
-    private static MethodType lookup(Class<?> clazz, String methodName, int args) {
-        Method method = Arrays.stream(clazz.getMethods())
-                .filter(m -> m.getName().equals(methodName))
-                .filter(m -> m.getParameterCount() == args)
-                .findFirst()
-                .orElse(null);
+    public MethodHandle lookup(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
+        MethodCacheKey key = new MethodCacheKey()
+                .setClazz(clazz)
+                .setMethodName(methodName)
+                .setParameterTypes(parameterTypes);
+        return getMethodHandle(key, LOOK_UP_METHOD_TYPE.andThen(VIRTUAL));
+    }
+
+    public MethodHandle lookupStatic(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
+        MethodCacheKey key = new MethodCacheKey()
+                .setClazz(clazz)
+                .setMethodName(methodName)
+                .setParameterTypes(parameterTypes);
+        return getMethodHandle(key, LOOK_UP_METHOD_TYPE.andThen(STATIC));
+    }
+
+    private static MethodType lookup0(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
+        Method method = null;
+        try {
+            method = clazz.getMethod(methodName, parameterTypes);
+        } catch (NoSuchMethodException e) {
+            // swallow
+        }
         checkNotNull(method, "class[%s] has no such method[%s]", clazz, methodName);
 
         Class<?>[] argsType = method.getParameterTypes();
@@ -98,12 +126,25 @@ public class MethodCache {
         }
     }
 
+    private String capitalize(String name) {
+        if (name == null || name.length() == 0) {
+            return name;
+        }
+        if (name.length() > 1
+                && Character.isUpperCase(name.charAt(0))){
+            return name;
+        }
+        char[] chars = name.toCharArray();
+        chars[0] = Character.toUpperCase(chars[0]);
+        return new String(chars);
+    }
+
     @Data
     @Accessors(chain = true)
     private static class MethodCacheKey {
-        private Class clazz;
+        private Class<?> clazz;
         private String methodName;
         private MethodType methodType;
-        private int args;
+        private Class<?>[] parameterTypes;
     }
 }
