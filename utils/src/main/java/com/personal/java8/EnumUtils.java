@@ -2,6 +2,7 @@ package com.personal.java8;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -51,5 +52,18 @@ public final class EnumUtils {
             );
         }
         return e;
+    }
+
+    /**
+     * 获取该枚举对应的值
+     * @param theEnum the enum
+     * @param function the function
+     * @return the value
+     */
+    public static <E extends Enum<E>, T> T getEnumValue(final E theEnum,
+                                                        final Function<E, T> function) {
+        return Optional.ofNullable(theEnum)
+                .map(function)
+                .orElse(null);
     }
 }
