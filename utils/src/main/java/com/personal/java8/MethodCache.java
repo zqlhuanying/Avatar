@@ -60,14 +60,12 @@ public class MethodCache {
     }
 
     public Object invokeSetter(Object o, String fieldName, Object param) {
-        String methodName = "set" + capitalize(fieldName);
-        MethodHandle methodHandle = lookup(o.getClass(), methodName, param.getClass()).bindTo(o);
+        MethodHandle methodHandle = lookupSetter(o.getClass(), fieldName, param.getClass()).bindTo(o);
         return invokeWithArguments(methodHandle, param);
     }
 
     public Object invokeGetter(Object o, String fieldName) {
-        String methodName = "get" + capitalize(fieldName);
-        MethodHandle methodHandle = lookup(o.getClass(), methodName).bindTo(o);
+        MethodHandle methodHandle = lookupGetter(o.getClass(), fieldName).bindTo(o);
         return invokeWithArguments(methodHandle);
     }
 
@@ -86,6 +84,16 @@ public class MethodCache {
                 .setMethodName(methodName)
                 .setParameterTypes(parameterTypes);
         return getMethodHandle(key, LOOK_UP_METHOD_TYPE.andThen(VIRTUAL));
+    }
+
+    public MethodHandle lookupGetter(Class<?> clazz, String fieldName) {
+        String methodName = "get" + capitalize(fieldName);
+        return lookup(clazz, methodName);
+    }
+
+    public MethodHandle lookupSetter(Class<?> clazz, String fieldName, Class<?> parameter) {
+        String methodName = "set" + capitalize(fieldName);
+        return lookup(clazz, methodName, parameter);
     }
 
     public MethodHandle lookupStatic(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
