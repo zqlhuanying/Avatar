@@ -2,6 +2,7 @@ package com.personal.java8;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import lombok.Data;
 import lombok.experimental.Accessors;
 import org.springframework.stereotype.Service;
@@ -10,10 +11,12 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -104,12 +107,18 @@ public class MethodCache {
         return getMethodHandle(key, LOOK_UP_METHOD_TYPE.andThen(STATIC));
     }
 
-    private static MethodType lookup0(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
-        Method method = null;
+    private MethodHandle getMethodHandle(MethodCacheKey cacheKey, Function<MethodCacheKey, MethodHandle> supplier) {
         try {
-            method = clazz.getMethod(methodName, parameterTypes);
-        } catch (NoSuchMethodException e) {
-            // swallow
+            return METHOD_CACHE.get(cacheKey, () -> supplier.apply(cacheKey));
+        } catch (ExecutionException e) {
+            throw new UncheckedExecutionException(e);
+        }
+    }
+
+    private static MethodType lookup0(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
+        Method method = exactLookup(clazz, methodName, parameterTypes);
+        if (method == null) {
+            method = fuzzyLookup(clazz, methodName, parameterTypes);
         }
         checkNotNull(method, "class[%s] has no such method[%s]", clazz, methodName);
 
@@ -118,12 +127,25 @@ public class MethodCache {
         return MethodType.methodType(returnType, argsType);
     }
 
-    private MethodHandle getMethodHandle(MethodCacheKey cacheKey, Function<MethodCacheKey, MethodHandle> supplier) {
+    private static Method exactLookup(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
         try {
-            return METHOD_CACHE.get(cacheKey, () -> supplier.apply(cacheKey));
-        } catch (ExecutionException e) {
-            throw new RuntimeException(e);
+            return clazz.getMethod(methodName, parameterTypes);
+        } catch (NoSuchMethodException e) {
+            // swallow
         }
+        return null;
+    }
+
+    private static Method fuzzyLookup(Class<?> clazz, String methodName, Class<?>... parameterTypes) {
+        return Arrays.stream(clazz.getMethods())
+                .filter(m -> m.getName().equals(methodName))
+                .filter(m -> m.getParameterCount() == parameterTypes.length)
+                .filter(m ->
+                    IntStream.range(0, m.getParameterCount())
+                            .allMatch(i -> m.getParameterTypes()[i].isAssignableFrom(parameterTypes[i]))
+                )
+                .findFirst()
+                .orElse(null);
     }
 
     private Object invokeWithArguments(MethodHandle methodHandle, Object... params) {
