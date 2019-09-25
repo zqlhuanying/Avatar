@@ -12,6 +12,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -30,11 +31,22 @@ public class FutureUtils {
                     new LinkedBlockingDeque<>(), FUTURE_THREAD_FACTORY
             );
 
-    public static <U> List<U> processFutureNew(List<Supplier<U>> tasks) {
-        return processFutureNew(tasks, FutureUtils.<U>defaultExceptionHandler());
+    public static void processRunnable(List<Runnable> tasks) {
+        processRunnable(tasks, throwable -> {throw new CompletionException(throwable);});
     }
 
-    public static <U> List<U> processFutureNew(List<Supplier<U>> tasks,
+    public static void processRunnable(List<Runnable> tasks, Consumer<Throwable> perTaskThrowableFunction) {
+        tasks.forEach(
+                task -> CompletableFuture.runAsync(task, EXECUTOR)
+                        .exceptionally(t -> {perTaskThrowableFunction.accept(t); return null;})
+        );
+    }
+
+    public static <U> List<U> processFuture(List<Supplier<U>> tasks) {
+        return processFuture(tasks, FutureUtils.<U>defaultExceptionHandler());
+    }
+
+    public static <U> List<U> processFuture(List<Supplier<U>> tasks,
                                             Function<Throwable, ? extends U> perTaskThrowableFunction) {
         return processFutureAndMerge(tasks, perTaskThrowableFunction, Function.identity());
     }
