@@ -27,7 +27,7 @@ public class FutureUtils {
     private static final ThreadFactory FUTURE_THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("future-pool-%s").build();
     private static final ExecutorService EXECUTOR =
             new ThreadPoolExecutor(
-                    20, 30, 1000, TimeUnit.MILLISECONDS,
+                    50, 60, 1000, TimeUnit.MILLISECONDS,
                     new LinkedBlockingDeque<>(), FUTURE_THREAD_FACTORY
             );
 
