@@ -25,7 +25,7 @@ public final class CollectionUtil {
     }
 
     public static <T> Stream<T> of(final Iterable<T> fromIterable, boolean parallel) {
-        return StreamSupport.stream(fromIterable.spliterator(), parallel);
+        return StreamSupport.stream(safeNull(fromIterable).spliterator(), parallel);
     }
 
     public static <T, R> Iterable<R> map(final Iterable<T> fromIterable, Function<? super T, ? extends R> function) {
