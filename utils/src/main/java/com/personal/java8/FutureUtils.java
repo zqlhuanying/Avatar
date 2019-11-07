@@ -27,7 +27,7 @@ public class FutureUtils {
     private static final ThreadFactory FUTURE_THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("future-pool-%s").build();
     private static final ExecutorService EXECUTOR =
             new ThreadPoolExecutor(
-                    50, 60, 1000, TimeUnit.MILLISECONDS,
+                    150, 160, 1000, TimeUnit.MILLISECONDS,
                     new LinkedBlockingDeque<>(), FUTURE_THREAD_FACTORY
             );
 
@@ -40,6 +40,15 @@ public class FutureUtils {
                 task -> CompletableFuture.runAsync(task, EXECUTOR)
                         .exceptionally(t -> {perTaskThrowableFunction.accept(t); return null;})
         );
+    }
+
+    public static <U> CompletableFuture<U>[] processFutureWaiting(List<Supplier<U>> tasks) {
+        return processFutureWaiting(tasks, FutureUtils.<U>defaultExceptionHandler());
+    }
+
+    public static <U> CompletableFuture<U>[] processFutureWaiting(List<Supplier<U>> tasks,
+                                                                  Function<Throwable, ? extends U> perTaskThrowableFunction) {
+        return doProcess(tasks, perTaskThrowableFunction);
     }
 
     public static <U> List<U> processFuture(List<Supplier<U>> tasks) {
@@ -59,11 +68,15 @@ public class FutureUtils {
     public static <R, U> R processFutureAndMerge(List<Supplier<U>> tasks,
                                                  Function<Throwable, ? extends U> perTaskThrowableFunction,
                                                  Function<List<U>, R> mergeFunction) {
-        @SuppressWarnings("unchecked")
-        CompletableFuture<U>[] futureTasks = tasks.stream()
-                .map(task -> CompletableFuture.supplyAsync(task, EXECUTOR).exceptionally(perTaskThrowableFunction))
-                .toArray(CompletableFuture[]::new);
+        return FutureUtils.getAndMerge(FutureUtils.doProcess(tasks, perTaskThrowableFunction), mergeFunction);
+    }
 
+    public static <U> List<U> get(CompletableFuture<U>[] futureTasks) {
+        return getAndMerge(futureTasks, Function.identity());
+    }
+
+    public static <R, U> R getAndMerge(CompletableFuture<U>[] futureTasks,
+                                       Function<List<U>, R> mergeFunction) {
         return CompletableFuture.allOf(futureTasks)
                 .handleAsync((aVoid, throwable) -> {
                     List<U> results = Arrays.stream(futureTasks)
@@ -72,6 +85,14 @@ public class FutureUtils {
                     return mergeFunction.apply(results);
                 }, EXECUTOR)
                 .join();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <U> CompletableFuture<U>[] doProcess(List<Supplier<U>> tasks,
+                                                        Function<Throwable, ? extends U> perTaskThrowableFunction) {
+        return tasks.stream()
+                .map(task -> CompletableFuture.supplyAsync(task, EXECUTOR).exceptionally(perTaskThrowableFunction))
+                .toArray(CompletableFuture[]::new);
     }
 
     private static <U> Function<Throwable, ? extends U> defaultExceptionHandler() {
