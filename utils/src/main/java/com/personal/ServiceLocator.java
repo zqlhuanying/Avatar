@@ -2,9 +2,11 @@ package com.personal;
 
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.stereotype.Service;
 
 import java.beans.Introspector;
@@ -15,13 +17,13 @@ import java.util.List;
  * @author huanying
  */
 @Service
-public class ServiceLocator implements BeanFactoryAware {
+public class ServiceLocator implements BeanFactoryPostProcessor {
 
     private static final Splitter SPLITTER = Splitter.on(".").omitEmptyStrings();
     private static ListableBeanFactory beanFactory;
 
     @Override
-    public void setBeanFactory(BeanFactory beanFactory) {
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
         init(beanFactory);
     }
 
