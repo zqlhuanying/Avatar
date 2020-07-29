@@ -62,6 +62,14 @@ public class RequestArgsCache {
         return unwrap(cacheValue);
     }
 
+    public void invalidate(GroupKey groupKey) {
+        Cache<String, Object> contentCache = TIME_CACHE.getUnchecked(groupKey.getTimeUnit());
+        contentCache.invalidate(groupKey.getKey());
+        if (IS_NOT_DEFAULT_CACHE_TIME.test(groupKey.getTimeUnit())) {
+            defaultCache().invalidate(groupKey.getKey());
+        }
+    }
+
     private Object wrap(Object value) {
         return value == null ? EMPTY : value;
     }
