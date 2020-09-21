@@ -34,6 +34,10 @@ public class RequestArgsCache {
     }
 
     public Object get(GroupKey groupKey, Callable<?> loader) {
+        return get(groupKey, loader, true);
+    }
+
+    public Object get(GroupKey groupKey, Callable<?> loader, boolean cacheIfAbsent) {
         // 假如不是默认的缓存时间，则优先从默认缓存时间中获取数据
         // 因为获取到数据为Null时，会将结果值添加到该容器中
         if (IS_NOT_DEFAULT_CACHE_TIME.test(groupKey.getTimeUnit())) {
@@ -48,7 +52,7 @@ public class RequestArgsCache {
             cacheValue = contentCache.get(groupKey.getKey(), () -> {
                 Object value = wrap(loader.call());
                 // 假如获取到Null，则减少缓存时间
-                if (value == EMPTY && IS_NOT_DEFAULT_CACHE_TIME.test(groupKey.getTimeUnit())) {
+                if (value == EMPTY && cacheIfAbsent && IS_NOT_DEFAULT_CACHE_TIME.test(groupKey.getTimeUnit())) {
                     defaultCache().put(groupKey.getKey(), value);
                 }
                 return value;
@@ -56,8 +60,10 @@ public class RequestArgsCache {
         } catch (ExecutionException e) {
             throw new UncheckedExecutionException(e.getCause());
         }
-        if (cacheValue == EMPTY && IS_NOT_DEFAULT_CACHE_TIME.test(groupKey.getTimeUnit())) {
-            contentCache.invalidate(groupKey.getKey());
+        if (cacheValue == EMPTY) {
+            if (!cacheIfAbsent || IS_NOT_DEFAULT_CACHE_TIME.test(groupKey.getTimeUnit())) {
+                contentCache.invalidate(groupKey.getKey());
+            }
         }
         return unwrap(cacheValue);
     }
