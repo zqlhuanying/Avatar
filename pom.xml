@@ -30,7 +30,7 @@
         <disruptor.version>3.4.2</disruptor.version>
         <poi.version>3.17</poi.version>
         <commons-text.version>1.5</commons-text.version>
-        <commons-io.version>2.4</commons-io.version>
+        <commons-io.version>2.7</commons-io.version>
     </properties>
 
     <dependencyManagement>
